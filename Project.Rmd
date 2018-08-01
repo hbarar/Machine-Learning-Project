@@ -1,0 +1,131 @@
+---
+title: "Machine Learning Project"
+output: html_document
+---
+
+
+#Overview
+
+The objective  of this work is to predict the trend in which participants performed an exercise . Participants were asked to perform barebell lifts . The consequence would be classified in 5 different ways stored in "classe" variable such that "A" corresponds to the correct execution of the exercise, while the other 4 classes (B through E) correspond to common mistakes. After finding the reasonable trend , we are given a new data "TEST" and would be asked to predict the outcome based on our model .
+
+#Load Data
+
+
+
+```{r  warning=FALSE,message=FALSE}
+library(ggplot2);library(lattice);library(caret); library(rattle)
+train<-read.csv('http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv',na.strings=c("","NA","#DIV/0!"))
+test<-read.csv('http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv',na.strings=c("","NA","#DIV/0!"))
+cat("dimension train: ", dim(train)," and ","dimension Test:",dim(test) )
+cat(" Train's additional coloumn: ", setdiff(names(train),names(test))," and ","Test's additional coloumn:",setdiff(names(test),names(train)))
+
+```
+
+
+So original train/Test data have 160 variables . Close look at the train data reveal dat , many coloumns encompass NA data , so let's at first consider them as "NA strings". Then , we ignore the coloumns (variables) which have more than 50% NA data . As the second , We know , It is better to do not consider the independent variables which their variance is near zero . Therfore , we measure the near zero variance property of the variables and among them , just select the ones which have  "False nzv" . 
+
+Note: Despite the fact that both data have same number of coloumns but the names of the coloumns are not exactly same . Train's last coloumn is "Classe" which is not exist in Test data and on the other hand variable "Problem_id" is not exist in Train matrix . 
+
+Note: The Test data is not actually the real test data which we typically use as a testing matrix (selected data in the main Train matrix) . In other word ,This Test matrix is not used to check the reliability of our model but is just a data which doesn't have any outcome and just has independent variables . By giving its independent variables which outcome we would expect by using our predicted model? So , Since our main Train matrix doesn't have test matrix separately , as usual we need to select a specific portion of the Train as a Test matrix .
+
+
+
+#Cleaning Data
+```{r message=FALSE}
+mna<- vector(mode="numeric") ;k=0    #mna : training matrix after deleting the NA's variables . 
+for ( j in 1:ncol(train) ){
+x<-sum(is.na(train[,j]))*100/length(train[,j]); 
+if(x>50) {k<-k+1 ; mna[k]<-j} } ;trainav<-train[,-mna]
+#--------------------------------------------------------
+mnzv <- nearZeroVar(trainav, saveMetrics=TRUE)
+index<-which(mnzv$nzv==FALSE)
+keepcol<-rownames(mnzv[index,])      
+
+#keepcol : names of the coloumns after ignoring (NA's and nzv=True )
+#NOTE : Since we need just numeric related numbers , we gonna drop off the first 7 coloumns 
+#NOTE : Since the Test data which we uploaded along with the Train one should have the same independent variables , then
+#     : we will select the same coloumns as we ended up with the Train data .
+training<-trainav[,keepcol] ;training<-training[,7:length(keepcol)]
+keepcoltest<-keepcol[7:58]
+testing<-test[,keepcoltest] 
+cat("dimension train: ", dim(training)," and ","dimension Test:",dim(testing) )
+setdiff(names(training),names(testing))
+
+```
+It shows that Train has one coloumn more than Test data and that's fine , because the only test data requires to have is independent variables because it's outcome should be predicted by our predicted model while train data should have the outcome because we gonna make our model based on the outcome(classe) .
+
+#Modeling
+
+As we mentioned above our main data TEST is not being used as a TEST data, we need to make a test data through the partitioning of the 
+Train data . Le's do it .
+
+Deviding the data to train and test parts :
+```{r message=FALSE}
+unique(training$classe); set.seed(22519) ;
+inTrain <- createDataPartition(training$classe, p=0.70, list=F)
+dattrain<- training[inTrain, ]
+dattest<- training[-inTrain, ]
+```
+
+#First model 
+
+Since we have an outcome in forms of 5 different classes , the first model which comes in mind is "rpart" which classifies the outcome.
+we also used " Cross validation " in our models.
+```{r message=FALSE}
+modFit<-train(classe ~ .,method="rpart",trControl=trainControl(method = "cv", number = 4),data=dattrain)
+fancyRpartPlot(modFit$finalModel)
+prediction<-predict(modFit,data=dattrain)  
+confusionMatrix(prediction,dattrain$classe)
+```
+
+As results show , the accuracy of this model is around 50% which is low and we cannot rely on the predicted function . 
+So let's try "Random forest" which supposed to be more accurate algorithm as it gives important variables and removes multicollinearity  and outliers but takes more time for running and more complicated in interpretting.
+
+#Second model 
+
+
+
+```{r message=FALSE}
+modFit2<- train(classe ~., data=dattrain, method="rf", trControl=trainControl(method = "cv", number = 4),ntree=100)
+prediction<- predict(modFit2,dattrain)
+confusionMatrix(prediction, dattrain$classe)
+
+```
+
+By applying the random forest the accuracy becomes high 100% awhich seems sort of overfitting . Let's check it with our test data .
+```{r message=FALSE}
+set.seed(123)
+pred<-predict(modFit2,newdata=dattest) 
+confusionMatrix(pred,dattest$classe)
+```
+Our out-of-sample error rate is expected to be approximately 1.0 - 0.9935 = 0.0065. So, let's now apply the final model to our testing dataset
+
+```{r message=FALSE}
+result<-predict(modFit2, newdata=testing)
+print(result)
+```
+
+#Conclusion
+
+rpart algorithm didn't lead to reasonable accuracy while randomforest gives higher accurate despite the fact that 
+the running time was too long . The testing attempt results in 0.0065 out of sample error which is very low and 
+hereby , it is concluded that random forest should give a better prediction . Outcome of the test data which was considered as input for our predicted model was presented in this file and as can be seen there are 20 output since we have 20 objects but the independent variables are as same as train otherwise we couldn't predict the outcome .
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
